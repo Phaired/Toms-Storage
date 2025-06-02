@@ -29,6 +29,7 @@ import com.tom.storagemod.Content;
 import com.tom.storagemod.block.entity.StorageTerminalBlockEntity;
 import com.tom.storagemod.inventory.StoredItemStack;
 import com.tom.storagemod.network.NetworkHandler;
+import com.tom.storagemod.performance.OptimizedShiftClickHandler;
 import com.tom.storagemod.util.DataSlots;
 import com.tom.storagemod.util.IDataReceiver;
 import com.tom.storagemod.util.TerminalSyncManager;
@@ -52,6 +53,9 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 	public String search;
 	public boolean noSort;
 	public Slot offhand;
+	
+	// Gestionnaire optimisé pour les opérations shift-click
+	private OptimizedShiftClickHandler optimizedHandler;
 
 	public StorageTerminalMenu(int id, Inventory inv, StorageTerminalBlockEntity te) {
 		this(Content.storageTerminalMenu.get(), id, inv, te);
@@ -63,6 +67,7 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 		this.te = te;
 		this.pinv = inv;
 		this.sync = new TerminalSyncManager(inv.player.registryAccess());
+		this.optimizedHandler = new OptimizedShiftClickHandler(this);
 		addStorageSlots();
 		addDataSlot(DataSlots.create(v -> sorting = v, () -> te != null ? te.getSorting() : 0).onUpdate(this::updateGui));
 		addDataSlot(DataSlots.create(v -> modes = v, () -> te != null ? te.getModes() : 0).onUpdate(this::updateGui));
@@ -226,6 +231,13 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 			search = te.getLastSearch();
 			tag.putString("s", search);
 		} : null);
+		
+		// Invalider le cache lors des changements majeurs d'inventaire
+		if (optimizedHandler != null && te.getChangeCount() != changeCount) {
+			optimizedHandler.invalidateCache();
+			changeCount = te.getChangeCount();
+		}
+		
 		super.broadcastChanges();
 	}
 
@@ -246,19 +258,51 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 
 	@Override
 	public final ItemStack quickMoveStack(Player playerIn, int index) {
+		// Optimisation critique : utiliser le gestionnaire optimisé pour les gros réseaux
 		if (slots.size() > index) {
 			if (index > playerSlotsStart && te != null) {
+				// Du joueur vers le stockage - optimisation spéciale
 				if (slots.get(index) != null && slots.get(index).hasItem()) {
 					Slot slot = slots.get(index);
 					ItemStack slotStack = slot.getItem();
+					ItemStack originalStack = slotStack.copy();
+					
+					// Utiliser l'API optimisée du terminal
 					StoredItemStack c = te.pushStack(new StoredItemStack(slotStack, slotStack.getCount()));
 					ItemStack itemstack = c != null ? c.getActualStack() : ItemStack.EMPTY;
 					slot.set(itemstack);
-					if (!playerIn.level().isClientSide)
-						broadcastChanges();
+					
+					// Invalider le cache si l'inventaire a changé
+					if (!ItemStack.matches(originalStack, itemstack)) {
+						optimizedHandler.invalidateCache();
+						if (!playerIn.level().isClientSide)
+							broadcastChanges();
+					}
 				}
 			} else {
-				return shiftClickItems(playerIn, index);
+				// Du stockage vers le joueur - utiliser le gestionnaire optimisé
+				if (optimizedHandler != null && index <= playerSlotsStart) {
+					Slot slot = slots.get(index);
+					if (slot != null && slot.hasItem()) {
+						ItemStack slotStack = slot.getItem().copy();
+						
+						// Utiliser moveItemStackTo optimisé pour éviter les boucles O(n)
+						boolean moved = optimizedHandler.optimizedMoveItemStackTo(
+							slot.getItem(), 
+							playerSlotsStart + 1, 
+							slots.size(), 
+							true
+						);
+						
+						if (moved && !ItemStack.matches(slotStack, slot.getItem())) {
+							optimizedHandler.invalidateCache();
+						}
+						
+						return moved ? slotStack : ItemStack.EMPTY;
+					}
+				} else {
+					return shiftClickItems(playerIn, index);
+				}
 			}
 		}
 		return ItemStack.EMPTY;
@@ -354,9 +398,11 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 					StoredItemStack pulled = te.pullStack(clicked, 1);
 					if(pulled != null) {
 						ItemStack itemstack = pulled.getActualStack();
-						this.moveItemStackTo(itemstack, playerSlotsStart + 1, this.slots.size(), true);
-						if (itemstack.getCount() > 0)
+						// Utiliser moveItemStackTo optimisé pour éviter le lag
+						boolean moved = optimizedHandler.optimizedMoveItemStackTo(itemstack, playerSlotsStart + 1, this.slots.size(), true);
+						if (!moved || itemstack.getCount() > 0) {
 							te.pushOrDrop(itemstack);
+						}
 						player.getInventory().setChanged();
 					}
 				} else {
@@ -407,9 +453,11 @@ public class StorageTerminalMenu extends RecipeBookMenu<CraftingInput, CraftingR
 				StoredItemStack pulled = te.pullStack(clicked, clicked.getMaxStackSize());
 				if(pulled != null) {
 					ItemStack itemstack = pulled.getActualStack();
-					this.moveItemStackTo(itemstack, playerSlotsStart + 1, this.slots.size() - 1, true);
-					if (itemstack.getCount() > 0)
+					// Utiliser moveItemStackTo optimisé pour éviter le lag
+					boolean moved = optimizedHandler.optimizedMoveItemStackTo(itemstack, playerSlotsStart + 1, this.slots.size() - 1, true);
+					if (!moved || itemstack.getCount() > 0) {
 						te.pushOrDrop(itemstack);
+					}
 					player.getInventory().setChanged();
 				}
 			}
