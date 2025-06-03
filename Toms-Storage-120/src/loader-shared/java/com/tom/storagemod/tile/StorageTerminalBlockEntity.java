@@ -3,6 +3,7 @@ package com.tom.storagemod.tile;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.IntStream;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -37,7 +38,9 @@ import com.tom.storagemod.util.TickerUtil.TickableServer;
 
 public class StorageTerminalBlockEntity extends BlockEntity implements MenuProvider, TickableServer {
 	private IItemHandler itemHandler;
-	private Map<StoredItemStack, Long> items = new HashMap<>();
+       private Map<StoredItemStack, Long> items = new HashMap<>();
+       // Index of item -> slots for faster extraction
+       private Map<StoredItemStack, IntArrayList> slotIndex = new HashMap<>();
 	private int sort;
 	private String lastSearch = "";
 	private boolean updateItems;
@@ -66,47 +69,51 @@ public class StorageTerminalBlockEntity extends BlockEntity implements MenuProvi
 		return items;
 	}
 
-	public StoredItemStack pullStack(StoredItemStack stack, long max) {
-		if(stack != null && itemHandler != null && max > 0) {
-			ItemStack st = stack.getStack();
-			StoredItemStack ret = null;
-			for (int i = itemHandler.getSlots() - 1; i >= 0; i--) {
-				ItemStack s = itemHandler.getStackInSlot(i);
-				if(ItemStack.isSameItemSameTags(s, st)) {
-					ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
-					if(!pulled.isEmpty()) {
-						if(ret == null)ret = new StoredItemStack(pulled);
-						else ret.grow(pulled.getCount());
-						max -= pulled.getCount();
-						if(max < 1)break;
-					}
-				}
-			}
-			return ret;
-		}
-		return null;
-	}
+       public StoredItemStack pullStack(StoredItemStack stack, long max) {
+               if(stack != null && itemHandler != null && max > 0) {
+                       ItemStack st = stack.getStack();
+                       StoredItemStack ret = null;
+                       IntArrayList slots = slotIndex.get(new StoredItemStack(st));
+                       if(slots == null) return null;
+                       for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
+                               int i = slots.getInt(j);
+                               ItemStack s = itemHandler.getStackInSlot(i);
+                               if(ItemStack.isSameItemSameTags(s, st)) {
+                                       ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                       if(!pulled.isEmpty()) {
+                                               if(ret == null)ret = new StoredItemStack(pulled);
+                                               else ret.grow(pulled.getCount());
+                                               max -= pulled.getCount();
+                                       }
+                               }
+                       }
+                       return ret;
+               }
+               return null;
+       }
 
-	public StoredItemStack pullStackFuzzy(StoredItemStack stack, long max) {
-		if(stack != null && itemHandler != null && max > 0) {
-			ItemStack st = stack.getStack();
-			StoredItemStack ret = null;
-			for (int i = itemHandler.getSlots() - 1; i >= 0; i--) {
-				ItemStack s = itemHandler.getStackInSlot(i);
-				if(ItemStack.isSameItem(s, st) && (ItemStack.isSameItemSameTags(s, st) || !s.isEnchanted())) {
-					ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
-					if(!pulled.isEmpty()) {
-						if(ret == null)ret = new StoredItemStack(pulled);
-						else ret.grow(pulled.getCount());
-						max -= pulled.getCount();
-						if(max < 1)break;
-					}
-				}
-			}
-			return ret;
-		}
-		return null;
-	}
+       public StoredItemStack pullStackFuzzy(StoredItemStack stack, long max) {
+               if(stack != null && itemHandler != null && max > 0) {
+                       ItemStack st = stack.getStack();
+                       StoredItemStack ret = null;
+                       IntArrayList slots = slotIndex.get(new StoredItemStack(st));
+                       if(slots == null) return null;
+                       for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
+                               int i = slots.getInt(j);
+                               ItemStack s = itemHandler.getStackInSlot(i);
+                               if(ItemStack.isSameItem(s, st) && (ItemStack.isSameItemSameTags(s, st) || !s.isEnchanted())) {
+                                       ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                       if(!pulled.isEmpty()) {
+                                               if(ret == null)ret = new StoredItemStack(pulled);
+                                               else ret.grow(pulled.getCount());
+                                               max -= pulled.getCount();
+                                       }
+                               }
+                       }
+                       return ret;
+               }
+               return null;
+       }
 
 	public StoredItemStack pushStack(StoredItemStack stack) {
 		if(stack != null && itemHandler != null) {
@@ -138,26 +145,33 @@ public class StorageTerminalBlockEntity extends BlockEntity implements MenuProvi
 
 	@Override
 	public void updateServer() {
-		if(updateItems) {
-			BlockState st = level.getBlockState(worldPosition);
-			Direction d = st.getValue(AbstractStorageTerminalBlock.FACING);
-			TerminalPos p = st.getValue(AbstractStorageTerminalBlock.TERMINAL_POS);
-			if(p == TerminalPos.UP)d = Direction.UP;
-			if(p == TerminalPos.DOWN)d = Direction.DOWN;
-			BlockEntity invTile = level.getBlockEntity(worldPosition.relative(d));
-			items.clear();
-			if(invTile != null) {
-				LazyOptional<IItemHandler> lih = invTile.getCapability(ForgeCapabilities.ITEM_HANDLER, d.getOpposite());
-				itemHandler = lih.orElse(null);
-				if(itemHandler != null) {
-					IntStream.range(0, itemHandler.getSlots()).mapToObj(itemHandler::getStackInSlot).filter(s -> !s.isEmpty()).
-					map(StoredItemStack::new).forEach(s -> items.merge(s, s.getQuantity(), (a, b) -> a + b));
-				}
-			} else {
-				itemHandler = null;
-			}
-			updateItems = false;
-		}
+               if(updateItems) {
+                       BlockState st = level.getBlockState(worldPosition);
+                       Direction d = st.getValue(AbstractStorageTerminalBlock.FACING);
+                       TerminalPos p = st.getValue(AbstractStorageTerminalBlock.TERMINAL_POS);
+                       if(p == TerminalPos.UP)d = Direction.UP;
+                       if(p == TerminalPos.DOWN)d = Direction.DOWN;
+                       BlockEntity invTile = level.getBlockEntity(worldPosition.relative(d));
+                       items.clear();
+                       slotIndex.clear();
+                       if(invTile != null) {
+                               LazyOptional<IItemHandler> lih = invTile.getCapability(ForgeCapabilities.ITEM_HANDLER, d.getOpposite());
+                               itemHandler = lih.orElse(null);
+                               if(itemHandler != null) {
+                                       for (int i = 0; i < itemHandler.getSlots(); i++) {
+                                               ItemStack s = itemHandler.getStackInSlot(i);
+                                               if(!s.isEmpty()) {
+                                                       StoredItemStack sis = new StoredItemStack(s);
+                                                       items.merge(sis, sis.getQuantity(), (a, b) -> a + b);
+                                                       slotIndex.computeIfAbsent(new StoredItemStack(s), k -> new IntArrayList()).add(i);
+                                               }
+                                       }
+                               }
+                       } else {
+                               itemHandler = null;
+                       }
+                       updateItems = false;
+               }
 		if(level.getGameTime() % 40 == 5) {
 			beaconLevel = BlockPos.betweenClosedStream(new AABB(worldPosition).inflate(8)).mapToInt(p -> {
 				if(level.isLoaded(p)) {
