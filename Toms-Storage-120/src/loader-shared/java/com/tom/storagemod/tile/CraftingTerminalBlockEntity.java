@@ -218,7 +218,7 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 				craftingCooldown += craftResult.getItem(0).getCount();
                                if (playerInvUpdate) thePlayer.containerMenu.broadcastChanges();
                        } finally {
-                               // Assurer que le flag est réinitialisé même en cas d'exception
+                               // Ensure the flag resets even if an exception occurs
                                refillingGrid = false;
                                MultiItemHandler.disableBatchMode();
                        }
