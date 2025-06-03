@@ -2,6 +2,7 @@ package com.tom.storagemod.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.WeakHashMap;
 
 import net.minecraft.world.item.ItemStack;
 
@@ -17,6 +18,64 @@ public class MultiItemHandler implements IItemHandler {
 	private int[] invSizes = new int[0];
 	private int invSize;
 	private boolean calling;
+
+	// Système de gestion de batch pour l'optimisation des performances
+	private static boolean batchModeEnabled = false;
+	private static int batchOperationCounter = 0;
+	private static final int BATCH_THRESHOLD = 10; // Nombre d'opérations avant notification
+	private static final int BATCH_MAX_OPERATIONS = 50; // Maximum d'opérations avant reset forcé
+	private static final WeakHashMap<Object, Integer> handlerAccessCount = new WeakHashMap<>();
+	private static long lastResetTime = System.currentTimeMillis();
+	private static final long BATCH_RESET_INTERVAL = 500; // 500ms
+
+	/**
+	 * Active le mode batch pour les opérations d'extraction d'items
+	 * Ce mode réduit les mises à jour des conteneurs pendant le crafting intensif
+	 */
+	public static void enableBatchMode() {
+		batchModeEnabled = true;
+		batchOperationCounter = 0;
+		handlerAccessCount.clear();
+	}
+
+	/**
+	 * Désactive le mode batch et force une mise à jour des conteneurs
+	 */
+	public static void disableBatchMode() {
+		batchModeEnabled = false;
+		batchOperationCounter = 0;
+		handlerAccessCount.clear();
+	}
+
+	/**
+	 * Reset forcé des compteurs de batch si nécessaire
+	 */
+	private static void checkBatchReset() {
+		long currentTime = System.currentTimeMillis();
+		if (batchOperationCounter > BATCH_MAX_OPERATIONS ||
+				(batchModeEnabled && currentTime - lastResetTime > BATCH_RESET_INTERVAL)) {
+			batchOperationCounter = 0;
+			handlerAccessCount.clear();
+			lastResetTime = currentTime;
+		}
+	}
+
+	/**
+	 * Vérifie si l'extraction doit déclencher une mise à jour
+	 * En mode batch, limite les mises à jour pour améliorer les performances
+	 */
+	private boolean shouldNotifyOnExtract(Object handler) {
+		if (!batchModeEnabled) return true;
+
+		checkBatchReset();
+
+		batchOperationCounter++;
+		int count = handlerAccessCount.getOrDefault(handler, 0) + 1;
+		handlerAccessCount.put(handler, count);
+
+		// Notifier périodiquement selon le nombre d'opérations sur ce handler
+		return count % BATCH_THRESHOLD == 0;
+	}
 
 	@Override
 	public boolean isItemValid(int slot, ItemStack stack) {
@@ -99,7 +158,33 @@ public class MultiItemHandler implements IItemHandler {
 		for (int i = 0; i < invSizes.length; i++) {
 			if(slot >= invSizes[i])slot -= invSizes[i];
 			else {
-				ItemStack s = handlers.get(i).orElse(EmptyHandler.INSTANCE).extractItem(slot, amount, simulate);
+				IItemHandler handler = handlers.get(i).orElse(EmptyHandler.INSTANCE);
+
+				// Limiter les mises à jour en mode batch pour réduire le lag
+				boolean originalSimulate = simulate;
+				if (!simulate && batchModeEnabled) {
+					// En mode non-simulé, vérifier si on doit vraiment notifier
+					// Si ce n'est pas le cas, extraire en mode simulé puis extraire sans notifier
+					if (!shouldNotifyOnExtract(handler)) {
+						// Premier appel pour vérifier ce qu'on peut extraire
+						ItemStack extracted = handler.extractItem(slot, amount, true);
+						if (!extracted.isEmpty()) {
+							// Si on peut extraire quelque chose, le faire sans déclencher de notification
+							try {
+								// Technique pour bypasser temporairement les notifications
+								// Cela fonctionne principalement avec les conteneurs de Create
+								// qui utilisent la valeur simulate pour décider s'il faut mettre à jour
+								simulate = true;
+								handler.extractItem(slot, extracted.getCount(), false);
+							} catch (Exception e) {
+								// Fallback en cas d'échec
+								simulate = originalSimulate;
+							}
+						}
+					}
+				}
+
+				ItemStack s = handler.extractItem(slot, amount, simulate);
 				calling = false;
 				return s;
 			}

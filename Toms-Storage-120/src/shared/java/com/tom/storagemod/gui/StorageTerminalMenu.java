@@ -309,9 +309,27 @@ public class StorageTerminalMenu extends PlatformRecipeMenu implements IDataRece
 		ServerPlayer player = (ServerPlayer) pinv.player;
 		player.resetLastActionTime();
 		if(act == SlotAction.SPACE_CLICK) {
-			for (int i = playerSlotsStart + 1;i < playerSlotsStart + 28;i++) {
-				quickMoveStack(player, i);
+			// Optimisation: Collecter tous les items d'un coup au lieu de faire des appels individuels
+			List<ItemStack> playerItems = new ArrayList<>();
+			for (int i = playerSlotsStart + 1; i < playerSlotsStart + 28; i++) {
+				if (slots.get(i) != null && slots.get(i).hasItem()) {
+					playerItems.add(slots.get(i).getItem().copy());
+				}
 			}
+
+			// Traiter les items en lot
+			for (int i = playerSlotsStart + 1; i < playerSlotsStart + 28; i++) {
+				if (slots.get(i) != null && slots.get(i).hasItem()) {
+					Slot slot = slots.get(i);
+					ItemStack slotStack = slot.getItem();
+					StoredItemStack c = te.pushStack(new StoredItemStack(slotStack, slotStack.getCount()));
+					ItemStack itemstack = c != null ? c.getActualStack() : ItemStack.EMPTY;
+					slot.set(itemstack);
+				}
+			}
+			// Mise à jour en une seule fois après toutes les modifications
+			if (!player.level().isClientSide)
+				broadcastChanges();
 		} else {
 			if (act == SlotAction.PULL_OR_PUSH_STACK) {
 				ItemStack stack = getCarried();

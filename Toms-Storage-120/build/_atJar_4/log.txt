@@ -1,7 +1,0 @@
-Java Launcher: C:\Program Files\Java\jdk-17\bin\java.exe
-Arguments: '--inJar, C:\Users\remyb\IdeaProjects\Toms-Storage\Toms-Storage-120\build\fg_cache\net\minecraftforge\forge\1.20.1-47.1.0\forge-1.20.1-47.1.0-injected.jar, --outJar, C:\Users\remyb\IdeaProjects\Toms-Storage\Toms-Storage-120\build\fg_cache\net\minecraftforge\forge\1.20.1-47.1.0_mapped_official_1.20.1\forge-1.20.1-47.1.0_mapped_official_1.20.1.jar, --logFile, accesstransform.log, --atFile, C:\Users\remyb\IdeaProjects\Toms-Storage\Toms-Storage-120\src\main\resources\META-INF\accesstransformer.cfg, --atFile, C:\Users\remyb\IdeaProjects\Toms-Storage\Toms-Storage-120\build\_atJar_4\parent_at.cfg'
-Classpath:
- - C:\Users\remyb\.gradle\caches\forge_gradle\maven_downloader\net\minecraftforge\accesstransformers\8.0.7\accesstransformers-8.0.7-fatjar.jar
-Working directory: C:\Users\remyb\IdeaProjects\Toms-Storage\Toms-Storage-120\build\_atJar_4
-Main class: net.minecraftforge.accesstransformer.TransformerProcessor
-====================================
