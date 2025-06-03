@@ -74,19 +74,35 @@ public class StorageTerminalBlockEntity extends BlockEntity implements MenuProvi
                        ItemStack st = stack.getStack();
                        StoredItemStack ret = null;
                        IntArrayList slots = slotIndex.get(new StoredItemStack(st));
-                       if(slots == null) return null;
-                       for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
-                               int i = slots.getInt(j);
-                               ItemStack s = itemHandler.getStackInSlot(i);
-                               if(ItemStack.isSameItemSameTags(s, st)) {
-                                       ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
-                                       if(!pulled.isEmpty()) {
-                                               if(ret == null)ret = new StoredItemStack(pulled);
-                                               else ret.grow(pulled.getCount());
-                                               max -= pulled.getCount();
+                       if(slots != null) {
+                               for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
+                                       int i = slots.getInt(j);
+                                       ItemStack s = itemHandler.getStackInSlot(i);
+                                       if(ItemStack.isSameItemSameTags(s, st)) {
+                                               ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                               if(!pulled.isEmpty()) {
+                                                       if(ret == null)ret = new StoredItemStack(pulled);
+                                                       else ret.grow(pulled.getCount());
+                                                       max -= pulled.getCount();
+                                               }
                                        }
                                }
                        }
+                       if(max > 0) {
+                               for (int i = itemHandler.getSlots() - 1; i >= 0 && max > 0; i--) {
+                                       if(slots != null && slots.contains(i)) continue;
+                                       ItemStack s = itemHandler.getStackInSlot(i);
+                                       if(ItemStack.isSameItemSameTags(s, st)) {
+                                               ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                               if(!pulled.isEmpty()) {
+                                                       if(ret == null)ret = new StoredItemStack(pulled);
+                                                       else ret.grow(pulled.getCount());
+                                                       max -= pulled.getCount();
+                                               }
+                                       }
+                               }
+                       }
+                       if(ret != null)updateItems = true;
                        return ret;
                }
                return null;
@@ -97,34 +113,51 @@ public class StorageTerminalBlockEntity extends BlockEntity implements MenuProvi
                        ItemStack st = stack.getStack();
                        StoredItemStack ret = null;
                        IntArrayList slots = slotIndex.get(new StoredItemStack(st));
-                       if(slots == null) return null;
-                       for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
-                               int i = slots.getInt(j);
-                               ItemStack s = itemHandler.getStackInSlot(i);
-                               if(ItemStack.isSameItem(s, st) && (ItemStack.isSameItemSameTags(s, st) || !s.isEnchanted())) {
-                                       ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
-                                       if(!pulled.isEmpty()) {
-                                               if(ret == null)ret = new StoredItemStack(pulled);
-                                               else ret.grow(pulled.getCount());
-                                               max -= pulled.getCount();
+                       if(slots != null) {
+                               for (int j = slots.size() - 1; j >= 0 && max > 0; j--) {
+                                       int i = slots.getInt(j);
+                                       ItemStack s = itemHandler.getStackInSlot(i);
+                                       if(ItemStack.isSameItem(s, st) && (ItemStack.isSameItemSameTags(s, st) || !s.isEnchanted())) {
+                                               ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                               if(!pulled.isEmpty()) {
+                                                       if(ret == null)ret = new StoredItemStack(pulled);
+                                                       else ret.grow(pulled.getCount());
+                                                       max -= pulled.getCount();
+                                               }
                                        }
                                }
                        }
+                       if(max > 0) {
+                               for (int i = itemHandler.getSlots() - 1; i >= 0 && max > 0; i--) {
+                                       if(slots != null && slots.contains(i)) continue;
+                                       ItemStack s = itemHandler.getStackInSlot(i);
+                                       if(ItemStack.isSameItem(s, st) && (ItemStack.isSameItemSameTags(s, st) || !s.isEnchanted())) {
+                                               ItemStack pulled = itemHandler.extractItem(i, (int) max, false);
+                                               if(!pulled.isEmpty()) {
+                                                       if(ret == null)ret = new StoredItemStack(pulled);
+                                                       else ret.grow(pulled.getCount());
+                                                       max -= pulled.getCount();
+                                               }
+                                       }
+                               }
+                       }
+                       if(ret != null)updateItems = true;
                        return ret;
                }
                return null;
        }
 
-	public StoredItemStack pushStack(StoredItemStack stack) {
-		if(stack != null && itemHandler != null) {
-			ItemStack is = ItemHandlerHelper.insertItemStacked(itemHandler, stack.getActualStack(), false);
-			if(is.isEmpty())return null;
-			else {
-				return new StoredItemStack(is);
-			}
-		}
-		return stack;
-	}
+       public StoredItemStack pushStack(StoredItemStack stack) {
+               if(stack != null && itemHandler != null) {
+                       ItemStack is = ItemHandlerHelper.insertItemStacked(itemHandler, stack.getActualStack(), false);
+                       updateItems = true;
+                       if(is.isEmpty())return null;
+                       else {
+                               return new StoredItemStack(is);
+                       }
+               }
+               return stack;
+       }
 
 	public ItemStack pushStack(ItemStack itemstack) {
 		StoredItemStack is = pushStack(new StoredItemStack(itemstack));
