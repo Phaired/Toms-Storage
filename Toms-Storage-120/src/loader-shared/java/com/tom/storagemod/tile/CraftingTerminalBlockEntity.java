@@ -105,9 +105,10 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 		return craftResult;
 	}
 
-	public void craft(Player thePlayer) {
-		if(currentRecipe != null) {
-			try {
+       public void craft(Player thePlayer) {
+               if(currentRecipe != null) {
+                       MultiItemHandler.enableBatchMode();
+                       try {
 				long currentTime = System.currentTimeMillis();
 				boolean useCache = currentTime - lastCraftTime < CACHE_VALIDITY_PERIOD;
 				lastCraftTime = currentTime;
@@ -215,13 +216,14 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 				refillingGrid = false;
 				onCraftingMatrixChanged();
 				craftingCooldown += craftResult.getItem(0).getCount();
-				if (playerInvUpdate) thePlayer.containerMenu.broadcastChanges();
-			} finally {
-				// Assurer que le flag est réinitialisé même en cas d'exception
-				refillingGrid = false;
-			}
-		}
-	}
+                               if (playerInvUpdate) thePlayer.containerMenu.broadcastChanges();
+                       } finally {
+                               // Ensure the flag resets even if an exception occurs
+                               refillingGrid = false;
+                               MultiItemHandler.disableBatchMode();
+                       }
+               }
+       }
 
 	/**
 	 * Génère une clé unique pour identifier un item et ses tags
