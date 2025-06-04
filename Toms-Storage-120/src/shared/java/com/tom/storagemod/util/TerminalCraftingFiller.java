@@ -29,11 +29,11 @@ public class TerminalCraftingFiller {
 	// Cache with WeakHashMap to allow garbage collection of unused recipes
 	private static final Map<Recipe<?>, Map<StoredItemStack, Integer>> recipeIngredientCache = new WeakHashMap<>(100);
 
-	// Counter to track consecutive crafts of the same recipe for batch optimizations
-	private static Recipe<?> lastRecipe = null;
-	private static int consecutiveCrafts = 0;
-	private static final int BATCH_THRESHOLD = 5; // Start batch processing after this many consecutive crafts
-	private static Map<StoredItemStack, StoredItemStack> batchPullBuffer = null;
+       // Counter to track consecutive crafts of the same recipe for batch optimizations
+       private Recipe<?> lastRecipe = null;
+       private int consecutiveCrafts = 0;
+       private static final int BATCH_THRESHOLD = 5; // Start batch processing after this many consecutive crafts
+       private Map<StoredItemStack, StoredItemStack> batchPullBuffer = null;
 
 	// Stats tracking to optimize cache management
 	private static long lastCacheClear = System.currentTimeMillis();
@@ -48,33 +48,34 @@ public class TerminalCraftingFiller {
 	public void placeRecipe(Recipe<?> recipe) {
 		 // Periodic cache maintenance to prevent memory leaks
 		long currentTime = System.currentTimeMillis();
-		if (currentTime - lastCacheClear > CACHE_CLEAR_INTERVAL) {
-			recipeIngredientCache.clear();
-			batchPullBuffer = null;
-			lastRecipe = null;
-			consecutiveCrafts = 0;
-			lastCacheClear = currentTime;
-		}
+               if (currentTime - lastCacheClear > CACHE_CLEAR_INTERVAL) {
+                       recipeIngredientCache.clear();
+                       flushBatchBuffer();
+                       batchPullBuffer = null;
+                       lastRecipe = null;
+                       consecutiveCrafts = 0;
+                       lastCacheClear = currentTime;
+               }
 
 		// Track consecutive crafts of the same recipe
-		if (recipe.equals(lastRecipe)) {
-			consecutiveCrafts++;
-		} else {
-			lastRecipe = recipe;
-			consecutiveCrafts = 0;
-			batchPullBuffer = null;
-		}
+               if (recipe.equals(lastRecipe)) {
+                       consecutiveCrafts++;
+               } else {
+                       flushBatchBuffer();
+                       lastRecipe = recipe;
+                       consecutiveCrafts = 0;
+                       batchPullBuffer = null;
+               }
 
 		// Clear crafting grid
 		te.clear(player);
 
-		// Load inventory items only once - loading on demand improves performance
-		if (allItems.isEmpty()) {
-			sync.fillCraftingFiller(this);
-			for (var i : player.getInventory().items) {
-				accountStack(i);
-			}
-		}
+               // Refresh cached inventory before each recipe fill
+               allItems.clear();
+               sync.fillCraftingFiller(this);
+               for (var i : player.getInventory().items) {
+                       accountStack(i);
+               }
 
 		// Calculate grid width
 		int rw = calculateRecipeWidth(recipe);
@@ -236,9 +237,21 @@ public class TerminalCraftingFiller {
 		return false;
 	}
 
-	public void accountStack(ItemStack st) {
-		if (st.isEmpty() || st.hasCustomHoverName()) return;
-		int index = StackedContents.getStackingIndex(st);
-		allItems.computeIfAbsent(index, __ -> new ArrayList<>()).add(st);
-	}
+        public void accountStack(ItemStack st) {
+                if (st.isEmpty() || st.hasCustomHoverName()) return;
+                int index = StackedContents.getStackingIndex(st);
+                allItems.computeIfAbsent(index, __ -> new ArrayList<>()).add(st);
+        }
+
+       public void flushBatchBuffer() {
+               if (batchPullBuffer != null && !batchPullBuffer.isEmpty()) {
+                       for (var stack : batchPullBuffer.values()) {
+                               if (stack != null && stack.getQuantity() > 0) {
+                                       te.pushStack(stack);
+                               }
+                       }
+                       batchPullBuffer.clear();
+               }
+               batchPullBuffer = null;
+       }
 }
