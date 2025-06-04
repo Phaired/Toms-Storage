@@ -247,7 +247,13 @@ public class TerminalCraftingFiller {
                if (batchPullBuffer != null && !batchPullBuffer.isEmpty()) {
                        for (var stack : batchPullBuffer.values()) {
                                if (stack != null && stack.getQuantity() > 0) {
-                                       te.pushStack(stack);
+                                       StoredItemStack remaining = te.pushStack(stack);
+                                       if (remaining != null) {
+                                               ItemStack is = remaining.getActualStack();
+                                               player.getInventory().add(is);
+                                               if (!is.isEmpty())
+                                                       te.dropItem(is);
+                                       }
                                }
                        }
                        batchPullBuffer.clear();
