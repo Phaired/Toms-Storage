@@ -118,20 +118,24 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 				boolean playerInvUpdate = false;
 				refillingGrid = true;
 
-				// Groupe les items identiques pour réduire le nombre d'appels à pullStack
-				Map<String, Integer> neededItems = new HashMap<>();
-				Map<String, ItemStack> itemTemplates = new HashMap<>();
+                               // Groupe les items identiques pour réduire le nombre d'appels à pullStack
+                               Map<String, Integer> neededItems = new HashMap<>();
+                               Map<String, ItemStack> itemTemplates = new HashMap<>();
 
-				// 1. Collecter les besoins
-				for (int i = 0; i < craftMatrix.getContainerSize(); ++i) {
-					ItemStack slot = craftMatrix.getItem(i);
-					if (!slot.isEmpty()) {
-						ItemStack oldItem = slot.copy();
-						String key = getItemKey(oldItem);
-						neededItems.put(key, neededItems.getOrDefault(key, 0) + 1);
-						itemTemplates.put(key, oldItem.copy());
-					}
-				}
+                               // 1. Collecter uniquement les besoins réels de réapprovisionnement
+                               for (int i = 0; i < craftMatrix.getContainerSize(); ++i) {
+                                       ItemStack slot = craftMatrix.getItem(i);
+                                       ItemStack rem = remainder.get(i);
+                                       if (!slot.isEmpty()) {
+                                               // Si le slot va devenir vide et qu'il n'y a pas de reste à replacer
+                                               if (slot.getCount() <= 1 && rem.isEmpty()) {
+                                                       ItemStack oldItem = slot.copy();
+                                                       String key = getItemKey(oldItem);
+                                                       neededItems.put(key, neededItems.getOrDefault(key, 0) + 1);
+                                                       itemTemplates.putIfAbsent(key, oldItem.copy());
+                                               }
+                                       }
+                               }
 
 				// Si les besoins sont identiques à la dernière opération, utiliser le cache
 				boolean needsAreSame = useCache && neededItems.equals(lastItemsCount);
@@ -171,10 +175,10 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 					}
 				}
 
-                                // 3. Application optimisée à la grille de craft
-                                for (int i = 0; i < remainder.size(); ++i) {
-                                        ItemStack slot = craftMatrix.getItem(i);
-                                        ItemStack rem = remainder.get(i);
+                               // 3. Application optimisée à la grille de craft
+                               for (int i = 0; i < remainder.size(); ++i) {
+                                       ItemStack slot = craftMatrix.getItem(i);
+                                       ItemStack rem = remainder.get(i);
 
                                         if (!slot.isEmpty()) {
                                                 String key = getItemKey(slot);
@@ -224,10 +228,26 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
                                                                 craftMatrix.setItem(i, rem.copy());
                                                         }
                                                 }
-                                        } else if (!rem.isEmpty()) {
-                                                craftMatrix.setItem(i, rem.copy());
-                                        }
-                                }
+
+                                       } else if (!rem.isEmpty()) {
+                                               craftMatrix.setItem(i, rem.copy());
+                                       }
+                               }
+
+                               // Retourner les items non utilisés à la storage
+                               for (List<ItemStack> lst : extractedItems.values()) {
+                                       for (ItemStack is : lst) {
+                                               if (!is.isEmpty()) {
+                                                       StoredItemStack st0 = pushStack(new StoredItemStack(is));
+                                                       if (st0 != null) {
+                                                               ItemStack item = st0.getActualStack();
+                                                               thePlayer.getInventory().add(item);
+                                                               if (!item.isEmpty())
+                                                                       dropItem(item);
+                                                       }
+                                               }
+                                       }
+                               }
 
 				refillingGrid = false;
 				onCraftingMatrixChanged();
