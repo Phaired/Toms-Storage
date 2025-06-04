@@ -160,31 +160,26 @@ public class MultiItemHandler implements IItemHandler {
 			else {
 				IItemHandler handler = handlers.get(i).orElse(EmptyHandler.INSTANCE);
 
-				// Limiter les mises à jour en mode batch pour réduire le lag
-				boolean originalSimulate = simulate;
-				if (!simulate && batchModeEnabled) {
-					// En mode non-simulé, vérifier si on doit vraiment notifier
-					// Si ce n'est pas le cas, extraire en mode simulé puis extraire sans notifier
-					if (!shouldNotifyOnExtract(handler)) {
-						// Premier appel pour vérifier ce qu'on peut extraire
-						ItemStack extracted = handler.extractItem(slot, amount, true);
-						if (!extracted.isEmpty()) {
-							// Si on peut extraire quelque chose, le faire sans déclencher de notification
-							try {
-								// Technique pour bypasser temporairement les notifications
-								// Cela fonctionne principalement avec les conteneurs de Create
-								// qui utilisent la valeur simulate pour décider s'il faut mettre à jour
-								simulate = true;
-								handler.extractItem(slot, extracted.getCount(), false);
-							} catch (Exception e) {
-								// Fallback en cas d'échec
-								simulate = originalSimulate;
-							}
-						}
-					}
-				}
+                               // Limiter les mises à jour en mode batch pour réduire le lag
+                               if (!simulate && batchModeEnabled && !shouldNotifyOnExtract(handler)) {
+                                       // On souhaite extraire sans déclencher de notification
+                                       // Extraire d'abord en mode simulé pour connaitre la quantité disponible
+                                       ItemStack extracted = handler.extractItem(slot, amount, true);
+                                       if(!extracted.isEmpty()) {
+                                               try {
+                                                       // Retirer réellement les items sans notification
+                                                       handler.extractItem(slot, extracted.getCount(), false);
+                                               } catch (Exception e) {
+                                                       // En cas d'erreur, abandonner
+                                                       calling = false;
+                                                       return ItemStack.EMPTY;
+                                               }
+                                       }
+                                       calling = false;
+                                       return extracted;
+                               }
 
-				ItemStack s = handler.extractItem(slot, amount, simulate);
+                               ItemStack s = handler.extractItem(slot, amount, simulate);
 				calling = false;
 				return s;
 			}
