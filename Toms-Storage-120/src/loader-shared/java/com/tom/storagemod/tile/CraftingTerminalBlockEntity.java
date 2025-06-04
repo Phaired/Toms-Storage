@@ -171,47 +171,63 @@ public class CraftingTerminalBlockEntity extends StorageTerminalBlockEntity {
 					}
 				}
 
-				// 3. Application optimisée à la grille de craft
-				for (int i = 0; i < remainder.size(); ++i) {
-					ItemStack slot = craftMatrix.getItem(i);
-					ItemStack rem = remainder.get(i);
+                                // 3. Application optimisée à la grille de craft
+                                for (int i = 0; i < remainder.size(); ++i) {
+                                        ItemStack slot = craftMatrix.getItem(i);
+                                        ItemStack rem = remainder.get(i);
 
-					if (!slot.isEmpty()) {
-						String key = getItemKey(slot);
-						craftMatrix.removeItem(i, 1);
+                                        if (!slot.isEmpty()) {
+                                                String key = getItemKey(slot);
+                                                craftMatrix.removeItem(i, 1);
+                                                ItemStack after = craftMatrix.getItem(i);
 
-						// Utiliser un item extrait si disponible
-						if (extractedItems.containsKey(key) && !extractedItems.get(key).isEmpty()) {
-							List<ItemStack> items = extractedItems.get(key);
-							craftMatrix.setItem(i, items.remove(0));
-						}
-						// Sinon, essayer l'inventaire du joueur si autorisé
-						else if ((getSorting() & (1 << 8)) != 0) {
-							boolean found = false;
-							for (int j = 0; j < thePlayer.getInventory().getContainerSize(); j++) {
-								ItemStack st = thePlayer.getInventory().getItem(j);
-								if (ItemStack.isSameItemSameTags(slot, st)) {
-									st = thePlayer.getInventory().removeItem(j, 1);
-									if (!st.isEmpty()) {
-										craftMatrix.setItem(i, st);
-										playerInvUpdate = true;
-										found = true;
-										break;
-									}
-								}
-							}
+                                                // Gestion de l'item de reste (bucket, etc.)
+                                                if (!rem.isEmpty()) {
+                                                        if (after.isEmpty()) {
+                                                                craftMatrix.setItem(i, rem.copy());
+                                                                after = craftMatrix.getItem(i);
+                                                        } else if (ItemStack.isSameItemSameTags(after, rem)) {
+                                                                after.grow(rem.getCount());
+                                                                craftMatrix.setItem(i, after);
+                                                        } else {
+                                                                StoredItemStack st0 = pushStack(new StoredItemStack(rem.copy()));
+                                                                if (st0 != null) {
+                                                                        ItemStack is = st0.getActualStack();
+                                                                        thePlayer.getInventory().add(is);
+                                                                        if (!is.isEmpty())
+                                                                                dropItem(is);
+                                                                }
+                                                        }
+                                                }
 
-							// Rien trouvé, on place l'item de reste s'il existe
-							if (!found && !rem.isEmpty()) {
-								craftMatrix.setItem(i, rem.copy());
-							}
-						}
-					}
-					// Gérer les items de reste
-					else if (!rem.isEmpty()) {
-						craftMatrix.setItem(i, rem.copy());
-					}
-				}
+                                                if (craftMatrix.getItem(i).isEmpty()) {
+                                                        boolean filled = false;
+                                                        if (extractedItems.containsKey(key) && !extractedItems.get(key).isEmpty()) {
+                                                                List<ItemStack> items = extractedItems.get(key);
+                                                                craftMatrix.setItem(i, items.remove(0));
+                                                                filled = true;
+                                                        } else if ((getSorting() & (1 << 8)) != 0) {
+                                                                for (int j = 0; j < thePlayer.getInventory().getContainerSize(); j++) {
+                                                                        ItemStack st = thePlayer.getInventory().getItem(j);
+                                                                        if (ItemStack.isSameItemSameTags(slot, st)) {
+                                                                                st = thePlayer.getInventory().removeItem(j, 1);
+                                                                                if (!st.isEmpty()) {
+                                                                                        craftMatrix.setItem(i, st);
+                                                                                        playerInvUpdate = true;
+                                                                                        filled = true;
+                                                                                }
+                                                                                break;
+                                                                        }
+                                                                }
+                                                        }
+                                                        if (!filled && !rem.isEmpty() && craftMatrix.getItem(i).isEmpty()) {
+                                                                craftMatrix.setItem(i, rem.copy());
+                                                        }
+                                                }
+                                        } else if (!rem.isEmpty()) {
+                                                craftMatrix.setItem(i, rem.copy());
+                                        }
+                                }
 
 				refillingGrid = false;
 				onCraftingMatrixChanged();
