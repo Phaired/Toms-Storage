@@ -39,8 +39,9 @@ public class CraftingTerminalMenu extends StorageTerminalMenu implements IAutoFi
 
 	private final CraftingContainer craftMatrix;
 	private final ResultContainer craftResult;
-	private Slot craftingResultSlot;
-	private final List<ContainerListener> listeners = Lists.newArrayList();
+       private Slot craftingResultSlot;
+       private final List<ContainerListener> listeners = Lists.newArrayList();
+       private final TerminalCraftingFiller craftingFiller;
 
 	@Override
 	public void addSlotListener(ContainerListener listener) {
@@ -54,29 +55,33 @@ public class CraftingTerminalMenu extends StorageTerminalMenu implements IAutoFi
 		listeners.remove(listener);
 	}
 
-	public CraftingTerminalMenu(int id, Inventory inv, CraftingTerminalBlockEntity te) {
-		super(Content.craftingTerminalCont.get(), id, inv, te);
-		craftMatrix = te.getCraftingInv();
-		craftResult = te.getCraftResult();
-		init();
-		this.addPlayerSlots(inv, 8, 174);
-		te.registerCrafting(this);
-	}
+       public CraftingTerminalMenu(int id, Inventory inv, CraftingTerminalBlockEntity te) {
+               super(Content.craftingTerminalCont.get(), id, inv, te);
+               craftMatrix = te.getCraftingInv();
+               craftResult = te.getCraftResult();
+               craftingFiller = new TerminalCraftingFiller(te, inv.player, sync);
+               init();
+               this.addPlayerSlots(inv, 8, 174);
+               te.registerCrafting(this);
+       }
 
-	public CraftingTerminalMenu(int id, Inventory inv) {
-		super(Content.craftingTerminalCont.get(), id, inv);
-		craftMatrix = new TransientCraftingContainer(this, 3, 3);
-		craftResult = new ResultContainer();
-		init();
-		this.addPlayerSlots(inv, 8, 174);
-	}
+       public CraftingTerminalMenu(int id, Inventory inv) {
+               super(Content.craftingTerminalCont.get(), id, inv);
+               craftMatrix = new TransientCraftingContainer(this, 3, 3);
+               craftResult = new ResultContainer();
+               craftingFiller = null;
+               init();
+               this.addPlayerSlots(inv, 8, 174);
+       }
 
-	@Override
-	public void removed(Player playerIn) {
-		super.removed(playerIn);
-		if(te != null)
-			((CraftingTerminalBlockEntity) te).unregisterCrafting(this);
-	}
+       @Override
+       public void removed(Player playerIn) {
+               super.removed(playerIn);
+               if(te != null) {
+                       ((CraftingTerminalBlockEntity) te).unregisterCrafting(this);
+               }
+               if(craftingFiller != null) craftingFiller.flushBatchBuffer();
+       }
 
 	private void init() {
 		int x = -4;
@@ -236,15 +241,15 @@ public class CraftingTerminalMenu extends StorageTerminalMenu implements IAutoFi
 	@Override
 	public void receive(CompoundTag message) {
 		super.receive(message);
-		if(message.contains("fill")) {
-			var id = ResourceLocation.tryParse(message.getString("fill"));
-			if (id != null) {
-				var recipe = pinv.player.level().getRecipeManager().byKey(id).orElse(null);
-				if (recipe != null) {
-					new TerminalCraftingFiller((CraftingTerminalBlockEntity) te, pinv.player, sync).placeRecipe(recipe);
-				}
-			}
-		}
+               if(message.contains("fill")) {
+                       var id = ResourceLocation.tryParse(message.getString("fill"));
+                       if (id != null) {
+                               var recipe = pinv.player.level().getRecipeManager().byKey(id).orElse(null);
+                               if (recipe != null && craftingFiller != null) {
+                                       craftingFiller.placeRecipe(recipe);
+                               }
+                       }
+               }
 	}
 
 	@Override
